@@ -1,0 +1,40 @@
+print_text:
+  name: Print text
+  description: Send text to print via RAW port 9100.
+  fields:
+    text:
+      name: Text
+      description: Text content to print.
+      required: true
+      example: "Hello World"
+      selector:
+        text:
+
+print_file:
+  name: Print file
+  description: Print a file (PDF, image, etc.) via RAW port 9100.
+  fields:
+    filepath:
+      name: File path
+      description: Absolute path to the file on the HA server.
+      required: true
+      example: "/config/www/report.pdf"
+      selector:
+        text:
+
+clean_printhead:
+  name: Clean printhead
+  description: Run printhead cleaning cycle.
+  fields:
+    deep:
+      name: Deep clean
+      description: Whether to run a deep cleaning cycle.
+      required: false
+      default: false
+      selector:
+        boolean:
+
+nozzle_check:
+  name: Nozzle check
+  description: Print a nozzle check pattern.
+  fields: {}

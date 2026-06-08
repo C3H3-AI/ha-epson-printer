@@ -1,0 +1,14 @@
+{
+  "domain": "epson_printer",
+  "name": "Epson Printer",
+  "version": "0.2.0",
+  "documentation": "https://github.com/wwerther/ha-epson-ecotank-stats",
+  "issue_tracker": "https://github.com/wwerther/ha-epson-ecotank-stats/issues",
+  "authors": ["@C3H3-AI"],
+  "codeowners": ["@C3H3-AI"],
+  "config_flow": true,
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "requirements": ["beautifulsoup4>=4.12"],
+  "dependencies": []
+}

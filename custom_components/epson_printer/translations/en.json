@@ -1,0 +1,64 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "host": "Host",
+          "name": "Name",
+          "scheme": "Scheme",
+          "port": "Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to printer",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This printer is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "pages_total": { "name": "Pages printed" },
+      "pages_bw": { "name": "Pages B&W" },
+      "pages_color": { "name": "Pages color" },
+      "pages_simplex": { "name": "Pages simplex" },
+      "pages_duplex": { "name": "Pages duplex" },
+      "ink_k": { "name": "Black ink" },
+      "ink_c": { "name": "Cyan ink" },
+      "ink_m": { "name": "Magenta ink" },
+      "ink_y": { "name": "Yellow ink" },
+      "printer_status": { "name": "Printer status" },
+      "epson_connect_status": { "name": "Epson Connect" },
+      "first_print_date": { "name": "First print date" },
+      "firmware": { "name": "Firmware version" },
+      "function_bw_copy": { "name": "B&W copies" },
+      "function_color_copy": { "name": "Color copies" },
+      "function_bw_fax": { "name": "B&W faxes" },
+      "function_color_fax": { "name": "Color faxes" },
+      "function_bw_scan": { "name": "B&W scans" },
+      "function_color_scan": { "name": "Color scans" },
+      "function_bw_print": { "name": "B&W prints" },
+      "function_color_print": { "name": "Color prints" },
+      "function_bw_other": { "name": "B&W other" },
+      "function_color_other": { "name": "Color other" },
+      "ipp_state": { "name": "IPP state" },
+      "ipp_state_reason": { "name": "IPP state reason" },
+      "ipp_uptime": { "name": "IPP uptime" },
+      "ipp_model": { "name": "IPP model" },
+      "ipp_queued_jobs": { "name": "IPP queued jobs" },
+      "ipp_accepting_jobs": { "name": "IPP accepting jobs" },
+      "ipp_pages_per_minute": { "name": "IPP pages per minute" }
+    }
+  }
+}
