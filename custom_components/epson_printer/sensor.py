@@ -83,12 +83,24 @@ def _ipp_attr(data: Mapping[str, Any], attr: str) -> Any:
     return data.get(DATA_IPP, {}).get(attr)
 
 
+def _icon_for_function(name: str) -> str:
+    """Return an appropriate icon for a printer function key."""
+    icons = {
+        "print": "mdi:printer",
+        "copy": "mdi:content-copy",
+        "scan": "mdi:scanner",
+        "fax": "mdi:fax",
+    }
+    return icons.get(name, "mdi:file-document")
+
+
 # ── Sensor descriptions ────────────────────────────────────────────────────
 
 PAGE_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
     EpsonSensorDescription(
         key=KEY_PAGES_TOTAL,
         translation_key="pages_total",
+        icon="mdi:file-document-multiple",
         native_unit_of_measurement=UNIT_PAGES,
         state_class=SensorStateClass.TOTAL_INCREASING,
         value_fn=lambda d: _maintenance(d, KEY_PAGES_TOTAL),
@@ -96,6 +108,7 @@ PAGE_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
     EpsonSensorDescription(
         key=KEY_PAGES_BW,
         translation_key="pages_bw",
+        icon="mdi:file-document-outline",
         native_unit_of_measurement=UNIT_PAGES,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_registry_enabled_default=False,
@@ -104,6 +117,7 @@ PAGE_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
     EpsonSensorDescription(
         key=KEY_PAGES_COLOR,
         translation_key="pages_color",
+        icon="mdi:palette",
         native_unit_of_measurement=UNIT_PAGES,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_registry_enabled_default=False,
@@ -112,6 +126,7 @@ PAGE_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
     EpsonSensorDescription(
         key=KEY_PAGES_SIMPLEX,
         translation_key="pages_simplex",
+        icon="mdi:file-document-outline",
         native_unit_of_measurement=UNIT_PAGES,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_registry_enabled_default=False,
@@ -120,6 +135,7 @@ PAGE_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
     EpsonSensorDescription(
         key=KEY_PAGES_DUPLEX,
         translation_key="pages_duplex",
+        icon="mdi:file-compare",
         native_unit_of_measurement=UNIT_PAGES,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_registry_enabled_default=False,
@@ -131,6 +147,7 @@ FUNCTION_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = tuple(
     EpsonSensorDescription(
         key=f"function_{name}",
         translation_key=f"function_{name}",
+        icon=_icon_for_function(name),
         native_unit_of_measurement=UNIT_PAGES,
         state_class=SensorStateClass.TOTAL_INCREASING,
         entity_registry_enabled_default=False,
@@ -143,6 +160,7 @@ INK_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = tuple(
     EpsonSensorDescription(
         key=f"ink_{colour.lower()}",
         translation_key=f"ink_{colour.lower()}",
+        icon="mdi:water",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=True,
@@ -155,18 +173,21 @@ DIAGNOSTIC_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
     EpsonSensorDescription(
         key=KEY_PRINTER_STATUS,
         translation_key="printer_status",
+        icon="mdi:printer-check",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _product(d, KEY_PRINTER_STATUS),
     ),
     EpsonSensorDescription(
         key=KEY_EPSON_CONNECT_STATUS,
         translation_key="epson_connect_status",
+        icon="mdi:wifi-check",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _product(d, KEY_EPSON_CONNECT_STATUS),
     ),
     EpsonSensorDescription(
         key=KEY_FIRST_PRINT_DATE,
         translation_key="first_print_date",
+        icon="mdi:calendar",
         device_class=SensorDeviceClass.DATE,
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _maintenance(d, KEY_FIRST_PRINT_DATE),
@@ -174,6 +195,7 @@ DIAGNOSTIC_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
     EpsonSensorDescription(
         key=KEY_FIRMWARE,
         translation_key="firmware",
+        icon="mdi:chip",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
         value_fn=lambda d: _product(d, KEY_FIRMWARE),
@@ -233,6 +255,9 @@ IPP_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
         value_fn=lambda d: _ipp_attr(d, "pages-per-minute"),
     ),
 )
+
+
+
 
 
 def _format_printer_state(val: Any) -> str | None:
@@ -335,6 +360,13 @@ class EpsonPrinterSensor(CoordinatorEntity[EpsonPrinterCoordinator], SensorEntit
         if self.coordinator.data is None:
             return None
         return self.entity_description.value_fn(self.coordinator.data)
+
+    @property
+    def icon(self) -> str | None:
+        """Return the icon."""
+        if self.entity_description and self.entity_description.icon:
+            return self.entity_description.icon
+        return super().icon
 
     @property
     def available(self) -> bool:

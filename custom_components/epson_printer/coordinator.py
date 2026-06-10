@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import ssl
 from datetime import timedelta
 from typing import Any
 
@@ -38,6 +39,19 @@ from .ipp_client import EpsonIppClient
 from .parser import parse_maintenance, parse_product_status
 
 _LOGGER = logging.getLogger(__name__)
+
+# Shared SSL context that never validates — Epson printers use self-signed certs
+_INSECURE_SSL_CTX: ssl.SSLContext | None = None
+
+
+def _get_insecure_ssl_ctx() -> ssl.SSLContext:
+    global _INSECURE_SSL_CTX
+    if _INSECURE_SSL_CTX is None:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        _INSECURE_SSL_CTX = ctx
+    return _INSECURE_SSL_CTX
 
 
 class EpsonPrinterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -123,9 +137,14 @@ class EpsonPrinterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _fetch_html(self, path: str) -> str:
         url = f"{self.base_url}{path}"
         timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
-        async with self._session.get(url, timeout=timeout, ssl=False) as resp:
-            resp.raise_for_status()
-            return await resp.text(encoding="utf-8", errors="replace")
+        if url.startswith("https"):
+            async with self._session.get(url, timeout=timeout, ssl_context=_get_insecure_ssl_ctx()) as resp:
+                resp.raise_for_status()
+                return await resp.text(encoding="utf-8", errors="replace")
+        else:
+            async with self._session.get(url, timeout=timeout, ssl=False) as resp:
+                resp.raise_for_status()
+                return await resp.text(encoding="utf-8", errors="replace")
 
     async def _fetch_ipp(self) -> dict:
         """Fetch IPP attributes (blocking socket, run in executor)."""
@@ -140,10 +159,19 @@ class EpsonPrinterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _set_language_english(self) -> None:
         url = f"{self.base_url}{PATH_COMMON}"
         timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
-        async with self._session.post(
-            url,
-            data={"SEL_LANGA": LANG_ENGLISH},
-            timeout=timeout,
-            ssl=False,
-        ) as resp:
-            resp.raise_for_status()
+        if url.startswith("https"):
+            async with self._session.post(
+                url,
+                data={"SEL_LANGA": LANG_ENGLISH},
+                timeout=timeout,
+                ssl_context=_get_insecure_ssl_ctx(),
+            ) as resp:
+                resp.raise_for_status()
+        else:
+            async with self._session.post(
+                url,
+                data={"SEL_LANGA": LANG_ENGLISH},
+                timeout=timeout,
+                ssl=False,
+            ) as resp:
+                resp.raise_for_status()

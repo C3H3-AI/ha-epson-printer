@@ -24,8 +24,8 @@ CONF_IPP_PORT: Final = "ipp_port"
 CONF_RAW_PORT: Final = "raw_port"
 CONF_IPP_UUID: Final = "ipp_uuid"
 
-DEFAULT_SCHEME: Final = "https"
-DEFAULT_PORT: Final = 443
+DEFAULT_SCHEME: Final = "http"
+DEFAULT_PORT: Final = 80
 DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=5)
 MIN_SCAN_INTERVAL_SECONDS: Final = 30
 HTTP_TIMEOUT_SECONDS: Final = 15

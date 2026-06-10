@@ -1,0 +1,95 @@
+{
+  "epson_printer": {
+    "default": "mdi:printer"
+  },
+  "entity": {
+    "sensor": {
+      "pages_total": {
+        "default": "mdi:file-document-multiple"
+      },
+      "pages_bw": {
+        "default": "mdi:file-document-outline"
+      },
+      "pages_color": {
+        "default": "mdi:palette"
+      },
+      "pages_simplex": {
+        "default": "mdi:file-document-outline"
+      },
+      "pages_duplex": {
+        "default": "mdi:file-compare"
+      },
+      "function_print": {
+        "default": "mdi:printer"
+      },
+      "function_copy": {
+        "default": "mdi:content-copy"
+      },
+      "function_scan": {
+        "default": "mdi:scanner"
+      },
+      "function_fax": {
+        "default": "mdi:fax"
+      },
+      "ink_black": {
+        "default": "mdi:water"
+      },
+      "ink_cyan": {
+        "default": "mdi:water"
+      },
+      "ink_magenta": {
+        "default": "mdi:water"
+      },
+      "ink_yellow": {
+        "default": "mdi:water"
+      },
+      "printer_status": {
+        "default": "mdi:printer-check"
+      },
+      "epson_connect_status": {
+        "default": "mdi:wifi-check"
+      },
+      "first_print_date": {
+        "default": "mdi:calendar"
+      },
+      "firmware": {
+        "default": "mdi:chip"
+      },
+      "ipp_state": {
+        "default": "mdi:printer-eye"
+      },
+      "ipp_state_reason": {
+        "default": "mdi:information-outline"
+      },
+      "ipp_uptime": {
+        "default": "mdi:clock-outline"
+      },
+      "ipp_model": {
+        "default": "mdi:label-outline"
+      },
+      "ipp_queued_jobs": {
+        "default": "mdi:format-list-numbered"
+      },
+      "ipp_accepting_jobs": {
+        "default": "mdi:check-circle-outline"
+      },
+      "ipp_pages_per_minute": {
+        "default": "mdi:speedometer"
+      }
+    }
+  },
+  "services": {
+    "print_text": {
+      "service": "mdi:file-document-edit"
+    },
+    "print_file": {
+      "service": "mdi:file-upload"
+    },
+    "clean_printhead": {
+      "service": "mdi:broom"
+    },
+    "nozzle_check": {
+      "service": "mdi:format-list-bulleted"
+    }
+  }
+}

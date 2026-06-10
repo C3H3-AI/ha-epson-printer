@@ -32,9 +32,11 @@ def _find_ipp_identifier(hass: HomeAssistant, host: str) -> str | None:
     needle = host.lower()
     for device in registry.devices.values():
         ipp_id: str | None = None
-        for domain, identifier in device.identifiers:
+        for identifier_tuple in device.identifiers:
+            domain = identifier_tuple[0]
             if domain == IPP_DOMAIN:
-                ipp_id = identifier
+                if len(identifier_tuple) >= 2:
+                    ipp_id = str(identifier_tuple[1])
                 break
         if ipp_id is None:
             continue
