@@ -1,5 +1,6 @@
 """IPP client for Epson printer monitoring."""
 
+import io
 import logging
 import socket
 import ssl
@@ -23,10 +24,112 @@ TAG_LANGUAGE = 0x48
 TAG_NAME_WITHOUT_LANG = 0x42
 TAG_TEXT_WITHOUT_LANG = 0x41
 TAG_END = 0x03
+TAG_MIME = 0x49  # mimeMediaType
+
+
+def _image_to_pwg_raster(
+    image_bytes: bytes,
+    width: int,
+    height: int,
+    color_mode: str = "srgb_8",
+) -> bytes:
+    """Convert a PIL-loaded image to PWG-Raster format.
+
+    PWG Raster (PWG 5102.4) is the standard IPP Everywhere raster format
+    used by AirPrint and most modern printers.
+    """
+    try:
+        from PIL import Image
+        import io
+
+        img = Image.open(io.BytesIO(image_bytes))
+
+        # Ensure correct mode
+        if color_mode == "srgb_8":
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            num_colors = 3
+            bpp = 8
+            color_space = 2  # sRGB
+            pixel_stride = 3
+        elif color_mode == "sgray_8":
+            if img.mode != "L":
+                img = img.convert("L")
+            num_colors = 1
+            bpp = 8
+            color_space = 1  # sGray
+            pixel_stride = 1
+        else:
+            raise ValueError(f"Unsupported color mode: {color_mode}")
+
+        # Resize to requested dimensions if specified
+        if width and height:
+            img = img.resize((width, height), Image.LANCZOS)
+
+        actual_width, actual_height = img.size
+        bytes_per_line = actual_width * pixel_stride
+
+        # Pad to 4-byte boundary (CUPS/linux convention)
+        bytes_per_line_padded = (bytes_per_line + 3) & ~3
+
+        # ── Build PWG-Raster header (512 bytes) ──
+        header = bytearray(512)
+
+        # Magic
+        header[0:8] = b"PwgRast"
+
+        def _le32(offset: int, val: int):
+            header[offset:offset+4] = struct.pack("<I", val)
+
+        _le32(8, 512)           # hdrlen
+        _le32(12, actual_height)  # height
+        _le32(16, actual_width)   # width
+        _le32(20, bpp)           # bpp (bits per pixel per plane)
+        _le32(24, color_space)   # colorSpace (1=sGray, 2=sRGB)
+        _le32(28, bpp)           # bitsPerColor
+        _le32(32, num_colors)    # numColors
+        _le32(36, 0)             # reserved
+        _le32(40, 0)             # device color space
+        _le32(44, 0)             # reserved
+        _le32(48, 0)             # reserved
+        _le32(52, 0)             # reserved
+        _le32(56, 0)             # reserved
+        _le32(60, 0)             # reserved
+        _le32(64, 0)             # reserved
+        _le32(68, 0)             # reserved
+        _le32(72, bytes_per_line_padded)  # bytesPerLine (padded)
+        _le32(76, 0)             # reserved
+        _le32(80, 0)             # renderingIntent
+        # Rest of header stays zeroed
+
+        # ── Raster data ──
+        raster = bytearray()
+        pixels = list(img.getdata())  # flat list of tuples
+
+        for y in range(actual_height):
+            row_start = y * actual_width
+            row_bytes = bytearray(bytes_per_line_padded)
+            for x in range(actual_width):
+                pixel = pixels[row_start + x]
+                if color_mode == "srgb_8":
+                    row_bytes[x * 3] = pixel[0]     # R
+                    row_bytes[x * 3 + 1] = pixel[1]  # G
+                    row_bytes[x * 3 + 2] = pixel[2]  # B
+                else:
+                    row_bytes[x] = pixel  # single channel (L mode gives int)
+            raster.extend(row_bytes)
+
+        return bytes(header) + bytes(raster)
+
+    except ImportError:
+        _LOGGER.error(
+            "Pillow (PIL) not available - cannot convert images to PWG-Raster. "
+            "Install with: pip install Pillow"
+        )
+        return b""
 
 
 class EpsonIppClient:
-    """Low-level IPP client for Epson printers."""
 
     def __init__(self, host: str, port: int = 631, use_ssl: bool = True):
         self.host = host
@@ -83,8 +186,17 @@ class EpsonIppClient:
         parts.append(bytes([TAG_END]))
         return b"".join(parts)
 
-    def _send_request(self, path: str, body: bytes) -> bytes | None:
-        """Send IPP request via HTTP and return response body."""
+    def _send_request(
+        self, path: str, body: bytes, timeout: int = 5
+    ) -> bytes | None:
+        """Send IPP request via HTTP and return response body.
+
+        Args:
+            path: URL path (e.g. "/ipp/print").
+            body: Full IPP binary body (without HTTP headers).
+            timeout: Socket timeout in seconds. Default 5s for queries,
+                use 120s+ for large print jobs.
+        """
         http_req = (
             f"POST {path} HTTP/1.1\r\n"
             f"Host: {self.host}:{self.port}\r\n"
@@ -95,7 +207,7 @@ class EpsonIppClient:
 
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)
+            sock.settimeout(timeout)
 
             if self.use_ssl:
                 ctx = ssl.create_default_context()
@@ -129,6 +241,8 @@ class EpsonIppClient:
     def _parse_attributes(self, data: bytes, offset: int) -> tuple[dict, int]:
         """Parse IPP attributes from binary data."""
         attrs = {}
+        _existing = {}  # track keys that have been seen (for 1setOf promotion)
+
         while offset < len(data):
             if offset >= len(data):
                 break
@@ -164,7 +278,19 @@ class EpsonIppClient:
 
             # Decode value based on tag type
             value = self._decode_value(tag, val_raw, name)
-            attrs[name] = value
+
+            if value is None:
+                continue
+
+            # Handle 1setOf: if key already exists, promote to list
+            if name in _existing:
+                if not isinstance(attrs[name], list):
+                    attrs[name] = [attrs[name]]
+                attrs[name].append(value)
+            else:
+                attrs[name] = value
+                _existing[name] = True
+
         return attrs, offset
 
     @staticmethod
@@ -205,8 +331,8 @@ class EpsonIppClient:
                 return f"{x}x{y} {unit}"
             return None
 
-        # Text / Name / Keyword / URI / Charset / Language (UTF-8 string)
-        if tag in (0x41, 0x42, 0x44, 0x45, 0x47, 0x48):
+        # Text / Name / Keyword / URI / Charset / Language / MIME (UTF-8 string)
+        if tag in (0x41, 0x42, 0x44, 0x45, 0x47, 0x48, 0x49):
             return val_raw.decode("utf-8", errors="replace")
 
         # Text/Name with language (tag 0x35-0x36 range)
@@ -262,6 +388,178 @@ class EpsonIppClient:
         # Restore original settings
         self.port = saved_port
         return None
+
+    @staticmethod
+    def _resolve_format_and_data(
+        document_data: bytes, document_format: str
+    ) -> tuple[bytes, str]:
+        """Auto-convert image data to PWG-Raster if needed.
+
+        Returns (converted_data, effective_format).
+        """
+        # Check file signatures for known image formats
+        is_jpeg = document_data[:3] == b"\xff\xd8\xff"
+        is_png = document_data[:8] == b"\x89PNG\r\n\x1a\n"
+        is_bmp = document_data[:2] == b"BM"
+
+        if document_format in ("image/jpeg", "image/png", "image/bmp") or (
+            document_format == "application/octet-stream"
+            and (is_jpeg or is_png or is_bmp)
+        ):
+            _LOGGER.info(
+                "Auto-converting %s to image/pwg-raster",
+                "JPEG" if is_jpeg else "PNG" if is_png else "BMP" if is_bmp else document_format
+            )
+            converted = _image_to_pwg_raster(document_data, 0, 0)
+            if converted:
+                return converted, "image/pwg-raster"
+            _LOGGER.warning("PWG-Raster conversion failed, falling back to raw")
+
+        return document_data, document_format
+
+    def print_job(
+        self,
+        document_data: bytes,
+        document_format: str = "application/octet-stream",
+        job_name: str | None = None,
+        user_name: str = "homeassistant",
+    ) -> dict:
+        """Submit a Print-Job request via IPP.
+
+        Args:
+            document_data: Raw file bytes to print.
+                JPEG, PNG, and BMP images are auto-converted to PWG-Raster.
+                Other formats (ESC/P commands, raw data) sent as-is.
+            document_format: MIME type hint (e.g. "image/jpeg",
+                "application/pdf", "image/pwg-raster").
+                Auto-detected for JPEG/PNG/BMP; otherwise use this value.
+            job_name: Optional human-readable job name.
+            user_name: Requesting user name (default "homeassistant").
+
+        Returns:
+            dict with "job_id" (int) and "job_state" (str) on success,
+            or empty dict on failure.
+        """
+        if not self._printer_uri:
+            self.discover()
+        if not self._printer_uri:
+            return {}
+
+        parts = []
+        # IPP version 2.0
+        parts.append(struct.pack(">H", 0x0200))
+        # Operation: Print-Job (0x0002)
+        parts.append(struct.pack(">H", 0x0002))
+        # Request ID
+        parts.append(struct.pack(">I", 1))
+
+        # ── Operation attributes group ──
+        parts.append(bytes([TAG_OPERATION]))
+
+        # attributes-charset = utf-8
+        name = b"attributes-charset"
+        val = b"utf-8"
+        parts.append(bytes([TAG_CHARSET]))
+        parts.append(struct.pack(">H", len(name)))
+        parts.append(name)
+        parts.append(struct.pack(">H", len(val)))
+        parts.append(val)
+
+        # attributes-natural-language = en
+        name = b"attributes-natural-language"
+        val = b"en"
+        parts.append(bytes([TAG_LANGUAGE]))
+        parts.append(struct.pack(">H", len(name)))
+        parts.append(name)
+        parts.append(struct.pack(">H", len(val)))
+        parts.append(val)
+
+        # printer-uri
+        name = b"printer-uri"
+        val = self._printer_uri.encode("ascii")
+        parts.append(bytes([TAG_URI]))
+        parts.append(struct.pack(">H", len(name)))
+        parts.append(name)
+        parts.append(struct.pack(">H", len(val)))
+        parts.append(val)
+
+        # requesting-user-name
+        name = b"requesting-user-name"
+        val = user_name.encode("utf-8")
+        parts.append(bytes([TAG_NAME_WITHOUT_LANG]))
+        parts.append(struct.pack(">H", len(name)))
+        parts.append(name)
+        parts.append(struct.pack(">H", len(val)))
+        parts.append(val)
+
+        # job-name (optional)
+        if job_name:
+            name = b"job-name"
+            val = job_name.encode("utf-8")
+            parts.append(bytes([TAG_NAME_WITHOUT_LANG]))
+            parts.append(struct.pack(">H", len(name)))
+            parts.append(name)
+            parts.append(struct.pack(">H", len(val)))
+            parts.append(val)
+
+        # Auto-convert images to PWG-Raster
+        resolved_data, resolved_format = self._resolve_format_and_data(
+            document_data, document_format
+        )
+
+        # document-format
+        name = b"document-format"
+        val = resolved_format.encode("ascii")
+        parts.append(bytes([TAG_KEYWORD]))
+        parts.append(struct.pack(">H", len(name)))
+        parts.append(name)
+        parts.append(struct.pack(">H", len(val)))
+        parts.append(val)
+
+        # End of attributes
+        parts.append(bytes([TAG_END]))
+
+        # ── Document data (appended after IPP header) ──
+        ipp_header = b"".join(parts)
+        body = ipp_header + resolved_data
+
+        resp = self._send_request(
+            self._path or "/ipp/print", body, timeout=120
+        )
+
+        # ── Parse response ──
+        if not resp or len(resp) < 8:
+            _LOGGER.error("IPP Print-Job: empty response")
+            return {}
+
+        status = struct.unpack(">H", resp[2:4])[0]
+        if status > 0x00FF:
+            _LOGGER.error("IPP Print-Job failed: status=0x%04X", status)
+            return {}
+
+        attrs, _ = self._parse_attributes(resp, 8)
+
+        job_id = attrs.get("job-id", None)
+        job_state = attrs.get("job-state", None)
+        state_map = {
+            3: "pending",
+            4: "pending-held",
+            5: "processing",
+            6: "stopped",
+            7: "cancelled",
+            8: "aborted",
+            9: "completed",
+        }
+        result = {"job_id": job_id}
+        if job_state is not None:
+            result["job_state"] = state_map.get(job_state, f"unknown ({job_state})")
+        _LOGGER.info(
+            "IPP Print-Job submitted: job_id=%s, state=%s, format=%s",
+            result.get("job_id"),
+            result.get("job_state", "?"),
+            document_format,
+        )
+        return result
 
     def get_printer_attributes(self) -> dict:
         """Get printer attributes via Get-Printer-Attributes."""

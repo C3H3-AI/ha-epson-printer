@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -38,6 +41,7 @@ from .const import (
     KEY_FIRST_PRINT_DATE,
     KEY_INK_LEVELS,
     KEY_MAC_ADDRESS,
+    KEY_MAINTENANCE_BOX,
     KEY_MODEL,
     KEY_PAGES_BW,
     KEY_PAGES_BY_FUNCTION,
@@ -46,10 +50,13 @@ from .const import (
     KEY_PAGES_SIMPLEX,
     KEY_PAGES_TOTAL,
     KEY_PRINTER_STATUS,
+    KEY_SCANNER_STATUS,
     KEY_SERIAL,
     MANUFACTURER,
 )
 from .coordinator import EpsonPrinterCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 UNIT_PAGES = "pages"
 
@@ -81,6 +88,17 @@ def _ink_level(data: Mapping[str, Any], colour: str) -> Any:
 
 def _ipp_attr(data: Mapping[str, Any], attr: str) -> Any:
     return data.get(DATA_IPP, {}).get(attr)
+
+
+def _parse_date(val: Any) -> date | None:
+    """Convert a date string to a date object."""
+    if val is None:
+        return None
+    try:
+        parts = str(val).split("-")
+        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+    except (ValueError, IndexError, TypeError):
+        return None
 
 
 def _icon_for_function(name: str) -> str:
@@ -156,19 +174,6 @@ FUNCTION_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = tuple(
     for name in FUNCTION_KEYS
 )
 
-INK_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = tuple(
-    EpsonSensorDescription(
-        key=f"ink_{colour.lower()}",
-        translation_key=f"ink_{colour.lower()}",
-        icon="mdi:water",
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_registry_enabled_default=True,
-        value_fn=lambda d, colour=colour: _ink_level(d, colour),
-    )
-    for colour in INK_COLORS
-)
-
 DIAGNOSTIC_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
     EpsonSensorDescription(
         key=KEY_PRINTER_STATUS,
@@ -176,6 +181,22 @@ DIAGNOSTIC_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
         icon="mdi:printer-check",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _product(d, KEY_PRINTER_STATUS),
+    ),
+    EpsonSensorDescription(
+        key=KEY_SCANNER_STATUS,
+        translation_key="scanner_status",
+        icon="mdi:scanner",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _product(d, KEY_SCANNER_STATUS),
+    ),
+    EpsonSensorDescription(
+        key=KEY_MAINTENANCE_BOX,
+        translation_key="maintenance_box",
+        icon="mdi:broom",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _product(d, KEY_MAINTENANCE_BOX),
     ),
     EpsonSensorDescription(
         key=KEY_EPSON_CONNECT_STATUS,
@@ -190,7 +211,7 @@ DIAGNOSTIC_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
         icon="mdi:calendar",
         device_class=SensorDeviceClass.DATE,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda d: _maintenance(d, KEY_FIRST_PRINT_DATE),
+        value_fn=lambda d: _parse_date(_maintenance(d, KEY_FIRST_PRINT_DATE)),
     ),
     EpsonSensorDescription(
         key=KEY_FIRMWARE,
@@ -257,9 +278,6 @@ IPP_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
 )
 
 
-
-
-
 def _format_printer_state(val: Any) -> str | None:
     states = {3: "idle", 4: "printing", 5: "stopped"}
     if val is None:
@@ -275,12 +293,36 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Epson Printer sensors from a config entry."""
+    _LOGGER.debug("sensor.async_setup_entry called for %s", entry.entry_id)
     coordinator: EpsonPrinterCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    # Detect which ink colours are actually available on this printer
+    available_inks: set[str] = set()
+    if coordinator.data and DATA_PRODUCT in coordinator.data:
+        inks = coordinator.data[DATA_PRODUCT].get(KEY_INK_LEVELS, {})
+        available_inks = set(inks.keys())
+        _LOGGER.debug("Available inks: %s, coordinator.data has keys: %s", available_inks, list(coordinator.data.keys()))
+    else:
+        _LOGGER.debug("coordinator.data is %s, DATA_PRODUCT in data: %s", coordinator.data is None, DATA_PRODUCT in (coordinator.data or {}))
+
+    ink_descriptions = tuple(
+        EpsonSensorDescription(
+            key=f"ink_{colour.lower()}",
+            translation_key=f"ink_{colour.lower()}",
+            icon="mdi:water",
+            native_unit_of_measurement=PERCENTAGE,
+            state_class=SensorStateClass.MEASUREMENT,
+            entity_registry_enabled_default=True,
+            value_fn=lambda d, colour=colour: _ink_level(d, colour),
+        )
+        for colour in INK_COLORS
+        if colour in available_inks
+    )
 
     descriptions = (
         PAGE_DESCRIPTIONS
         + FUNCTION_DESCRIPTIONS
-        + INK_DESCRIPTIONS
+        + ink_descriptions
         + DIAGNOSTIC_DESCRIPTIONS
         + IPP_DESCRIPTIONS
     )

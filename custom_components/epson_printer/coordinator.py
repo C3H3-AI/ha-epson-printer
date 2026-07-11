@@ -1,10 +1,14 @@
-"""DataUpdateCoordinator: fetches HTML status pages (ink/pages) + IPP state."""
+"""DataUpdateCoordinator: fetches HTML status pages (ink/pages) + IPP state.
+
+URL fallback: tries Advanced UI paths first, falls back to Basic UI paths.
+Supports printers with /ADVANCED/INFO_PRTINFO/TOP (fieldset) and
+/HTML/TOP/PRTINFO.HTML (li.tank) web interfaces.
+"""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import ssl
 from datetime import timedelta
 from typing import Any
 
@@ -18,6 +22,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import (
+    COMMON_PATHS,
     CONF_HOST,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
@@ -30,28 +35,15 @@ from .const import (
     DOMAIN,
     HTTP_TIMEOUT_SECONDS,
     LANG_ENGLISH,
+    MAINTENANCE_PATHS,
     MIN_SCAN_INTERVAL_SECONDS,
-    PATH_COMMON,
-    PATH_MAINTENANCE,
-    PATH_PRODUCT_STATUS,
+    PRODUCT_STATUS_PATHS,
+    get_insecure_ssl_ctx,
 )
 from .ipp_client import EpsonIppClient
-from .parser import parse_maintenance, parse_product_status
+from .parser import detect_page_format, parse_maintenance, parse_product_status
 
 _LOGGER = logging.getLogger(__name__)
-
-# Shared SSL context that never validates — Epson printers use self-signed certs
-_INSECURE_SSL_CTX: ssl.SSLContext | None = None
-
-
-def _get_insecure_ssl_ctx() -> ssl.SSLContext:
-    global _INSECURE_SSL_CTX
-    if _INSECURE_SSL_CTX is None:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        _INSECURE_SSL_CTX = ctx
-    return _INSECURE_SSL_CTX
 
 
 class EpsonPrinterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -68,17 +60,9 @@ class EpsonPrinterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
         self._session = async_get_clientsession(hass)
         self._language_set = False
-
-        # IPP client (raw socket, used via executor)
+        self._page_format: str | None = None
         host = entry.data[CONF_HOST]
-        scheme = entry.data.get(CONF_SCHEME, "https")
-        self._ipp_client = EpsonIppClient(host, 631, scheme == "https")
-        self._ipp_client._printer_uri = (
-            f"ipps://{host}:631/ipp/print"
-            if scheme == "https"
-            else f"ipp://{host}:631/ipp/print"
-        )
-        self._ipp_client._path = "/ipp/print"
+        self._ipp_client = EpsonIppClient(host, 631)
 
     @staticmethod
     def _scan_interval_from_options(entry: ConfigEntry) -> timedelta:
@@ -101,6 +85,29 @@ class EpsonPrinterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return f"{scheme}://{host}"
         return f"{scheme}://{host}:{port}"
 
+    def _build_url(self, path: str) -> str:
+        """Build an absolute URL for a given path."""
+        return f"{self.base_url}{path}"
+
+    async def async_config_entry_first_refresh(self) -> None:
+        """First refresh: detect page format, then do normal refresh."""
+        try:
+            first_path = PRODUCT_STATUS_PATHS[0]
+            html = await self._fetch_single(first_path)
+            self._page_format = detect_page_format(html)
+            _LOGGER.info("Detected page format: %s (via %s)", self._page_format, first_path)
+        except Exception as exc:
+            _LOGGER.debug("Advanced UI probe failed: %s. Trying basic...", exc)
+            try:
+                basic_path = PRODUCT_STATUS_PATHS[1]
+                html = await self._fetch_single(basic_path)
+                self._page_format = detect_page_format(html)
+                _LOGGER.info("Detected page format: %s (via %s)", self._page_format, basic_path)
+            except Exception as exc2:
+                _LOGGER.warning("Could not detect page format: %s. Falling back to advanced.", exc2)
+                self._page_format = "advanced"
+        await super().async_config_entry_first_refresh()
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch HTML pages + IPP attributes in parallel."""
         if not self._language_set:
@@ -112,42 +119,66 @@ class EpsonPrinterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._language_set = True
 
         try:
+            maintenance_task = self._fetch_html(MAINTENANCE_PATHS)
+            product_task = self._fetch_html(PRODUCT_STATUS_PATHS)
+            ipp_task = self._fetch_ipp()
             maintenance_html, product_html, ipp_data = await asyncio.gather(
-                self._fetch_html(PATH_MAINTENANCE),
-                self._fetch_html(PATH_PRODUCT_STATUS),
-                self._fetch_ipp(),
+                maintenance_task, product_task, ipp_task,
+            )
+
+            maintenance = await self.hass.async_add_executor_job(
+                parse_maintenance, maintenance_html
+            )
+            product = await self.hass.async_add_executor_job(
+                parse_product_status, product_html
             )
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Error talking to printer: {err}") from err
         except asyncio.TimeoutError as err:
             raise UpdateFailed("Timeout while fetching printer data") from err
 
-        maintenance = await self.hass.async_add_executor_job(
-            parse_maintenance, maintenance_html
-        )
-        product = await self.hass.async_add_executor_job(
-            parse_product_status, product_html
-        )
         return {
             DATA_MAINTENANCE: maintenance,
             DATA_PRODUCT: product,
             DATA_IPP: ipp_data or {},
         }
 
-    async def _fetch_html(self, path: str) -> str:
-        url = f"{self.base_url}{path}"
+    async def _fetch_single(self, path: str) -> str:
+        """Fetch a single HTML page from the printer. Raises on error."""
+        url = self._build_url(path)
         timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
-        if url.startswith("https"):
-            async with self._session.get(url, timeout=timeout, ssl_context=_get_insecure_ssl_ctx()) as resp:
-                resp.raise_for_status()
-                return await resp.text(encoding="utf-8", errors="replace")
+        kwargs: dict[str, Any] = {}
+        if self.base_url.startswith("https"):
+            kwargs["ssl_context"] = get_insecure_ssl_ctx()
         else:
-            async with self._session.get(url, timeout=timeout, ssl=False) as resp:
-                resp.raise_for_status()
-                return await resp.text(encoding="utf-8", errors="replace")
+            kwargs["ssl"] = False
+        async with self._session.get(url, timeout=timeout, **kwargs) as resp:
+            resp.raise_for_status()
+            return await resp.text(encoding="utf-8", errors="replace")
+
+    async def _fetch_html(self, paths: tuple[str, ...]) -> str:
+        """Fetch HTML, trying each path in order until one succeeds.
+
+        Returns the first successful response. If all paths fail,
+        returns empty string (non-fatal for maintenance pages).
+        """
+        errors: list[str] = []
+        for path in paths:
+            try:
+                return await self._fetch_single(path)
+            except (aiohttp.ClientResponseError, aiohttp.ClientError, asyncio.TimeoutError) as err:
+                _LOGGER.debug("Fetch %s failed: %s", path, err)
+                errors.append(f"{path}: {err}")
+                continue
+
+        if paths == PRODUCT_STATUS_PATHS:
+            raise UpdateFailed(
+                f"Could not reach printer at any known path: {'; '.join(errors)}"
+            )
+        _LOGGER.debug("Maintenance page unavailable (all paths failed): %s", errors)
+        return "<html></html>"
 
     async def _fetch_ipp(self) -> dict:
-        """Fetch IPP attributes (blocking socket, run in executor)."""
         try:
             return await self.hass.async_add_executor_job(
                 self._ipp_client.get_printer_attributes
@@ -157,21 +188,25 @@ class EpsonPrinterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return {}
 
     async def _set_language_english(self) -> None:
-        url = f"{self.base_url}{PATH_COMMON}"
-        timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
-        if url.startswith("https"):
-            async with self._session.post(
-                url,
-                data={"SEL_LANGA": LANG_ENGLISH},
-                timeout=timeout,
-                ssl_context=_get_insecure_ssl_ctx(),
-            ) as resp:
-                resp.raise_for_status()
-        else:
-            async with self._session.post(
-                url,
-                data={"SEL_LANGA": LANG_ENGLISH},
-                timeout=timeout,
-                ssl=False,
-            ) as resp:
-                resp.raise_for_status()
+        """Set printer language to English via POST.
+
+        Tries advanced COMMON path first, then basic if that fails.
+        Basic UI may not have a language endpoint; this is best-effort.
+        """
+        for path in COMMON_PATHS:
+            try:
+                url = self._build_url(path)
+                timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
+                kwargs: dict[str, Any] = {"data": {"SEL_LANGA": LANG_ENGLISH}, "timeout": timeout}
+                if self.base_url.startswith("https"):
+                    kwargs["ssl_context"] = get_insecure_ssl_ctx()
+                else:
+                    kwargs["ssl"] = False
+                async with self._session.post(url, **kwargs) as resp:
+                    resp.raise_for_status()
+                    _LOGGER.debug("Language set to English via %s", path)
+                    return
+            except Exception as err:
+                _LOGGER.debug("Language set via %s failed: %s", path, err)
+                continue
+        _LOGGER.debug("Could not set language to English (no path worked)")

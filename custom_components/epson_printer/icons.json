@@ -19,28 +19,46 @@
       "pages_duplex": {
         "default": "mdi:file-compare"
       },
-      "function_print": {
-        "default": "mdi:printer"
-      },
-      "function_copy": {
+      "function_bw_copy": {
         "default": "mdi:content-copy"
       },
-      "function_scan": {
-        "default": "mdi:scanner"
+      "function_color_copy": {
+        "default": "mdi:content-copy"
       },
-      "function_fax": {
+      "function_bw_fax": {
         "default": "mdi:fax"
       },
-      "ink_black": {
+      "function_color_fax": {
+        "default": "mdi:fax"
+      },
+      "function_bw_scan": {
+        "default": "mdi:scanner"
+      },
+      "function_color_scan": {
+        "default": "mdi:scanner"
+      },
+      "function_bw_print": {
+        "default": "mdi:printer"
+      },
+      "function_color_print": {
+        "default": "mdi:printer"
+      },
+      "function_bw_other": {
+        "default": "mdi:printer-off"
+      },
+      "function_color_other": {
+        "default": "mdi:printer-off"
+      },
+      "ink_k": {
         "default": "mdi:water"
       },
-      "ink_cyan": {
+      "ink_c": {
         "default": "mdi:water"
       },
-      "ink_magenta": {
+      "ink_m": {
         "default": "mdi:water"
       },
-      "ink_yellow": {
+      "ink_y": {
         "default": "mdi:water"
       },
       "printer_status": {
@@ -75,6 +93,27 @@
       },
       "ipp_pages_per_minute": {
         "default": "mdi:speedometer"
+      },
+      "scanner_status": {
+        "default": "mdi:scanner"
+      },
+      "maintenance_box": {
+        "default": "mdi:broom"
+      },
+      "ink_pb": {
+        "default": "mdi:water"
+      },
+      "ink_gy": {
+        "default": "mdi:water"
+      },
+      "ink_lc": {
+        "default": "mdi:water"
+      },
+      "ink_lm": {
+        "default": "mdi:water"
+      },
+      "ink_cl": {
+        "default": "mdi:water"
       }
     }
   },
