@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 import os
+import ast
+import re
 import tempfile
 import importlib.util
 
@@ -642,6 +644,78 @@ class TestPrintRouter:
         with patch.object(_print_router.shutil, "which", return_value=None), \
              patch.object(_print_router.os.path, "exists", return_value=False):
             assert convert_office_to_pdf(str(src), "soffice") is None
+
+
+class TestConstImportCompleteness:
+    """Guard against NameError at HA runtime: every constant defined in
+    const.py that is referenced by a runtime module must be either imported
+    from .const, defined locally, or imported from homeassistant.*.
+
+    Previously KEY_PAPER_SOURCE was used in sensor.py but never imported,
+    which crashed the whole sensor platform at load time (NameError) and
+    left the integration with zero entities. py_compile cannot catch this,
+    so we verify at the AST level.
+    """
+
+    _RUNTIME_MODULES = ["sensor.py", "__init__.py", "config_flow.py"]
+
+    @staticmethod
+    def _const_defined() -> set:
+        src = open(os.path.join(_pkg_path, "const.py"), encoding="utf-8").read()
+        return set(re.findall(r"^([A-Z][A-Z0-9_]+)\s*[:=]", src, re.M))
+
+    def _check(self, filename: str):
+        src = open(os.path.join(_pkg_path, filename), encoding="utf-8").read()
+        tree = ast.parse(src)
+
+        const_imported = set()
+        external_imported = set()  # e.g. homeassistant.const
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if node.level >= 1 and node.module == "const":
+                    for n in node.names:
+                        const_imported.add(n.asname or n.name)
+                elif "homeassistant" in node.module:
+                    for n in node.names:
+                        external_imported.add(n.asname or n.name)
+
+        local_defs = set()
+        for node in tree.body:
+            targets = (
+                node.targets
+                if isinstance(node, ast.Assign)
+                else ([node.target] if isinstance(node, ast.AnnAssign) else [])
+            )
+            for tg in targets:
+                if isinstance(tg, ast.Name):
+                    local_defs.add(tg.id)
+
+        used = {
+            n.id
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Name) and n.id.isupper() and len(n.id) >= 3
+        }
+
+        const_defined = self._const_defined()
+        # A const.py name used but NOT resolvable here = latent NameError.
+        missing = sorted(
+            n
+            for n in used
+            if n in const_defined
+            and n not in const_imported
+            and n not in local_defs
+            and n not in external_imported
+        )
+        assert not missing, f"{filename}: const names used but not imported: {missing}"
+
+    def test_sensor_imports(self):
+        self._check("sensor.py")
+
+    def test_init_imports(self):
+        self._check("__init__.py")
+
+    def test_config_flow_imports(self):
+        self._check("config_flow.py")
 
 
 
