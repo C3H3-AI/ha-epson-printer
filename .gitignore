@@ -1,3 +1,14 @@
 ﻿*.pyc
 __pycache__/
 .DS_Store
+
+# === 本地调试脚本与临时产物（非集成代码，勿提交）===
+# 下划线前缀的调试脚本
+_*.sh
+_*.py
+# 调试笔记 / 产物 markdown（README.md 已跟踪不受影响）
+*.md
+# 临时 lovelace 卡片设计稿
+printer_card.yaml
+# 测试缓存
+tests/__pycache__/
