@@ -12,6 +12,7 @@
                    ],
     "config_flow":  true,
     "integration_type":  "device",
+    "icon":  "mdi:printer",
     "iot_class":  "local_polling",
     "requirements":  [
                          "beautifulsoup4\u003e=4.12"
