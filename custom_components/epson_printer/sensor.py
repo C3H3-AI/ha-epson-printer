@@ -241,14 +241,14 @@ DIAGNOSTIC_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
     ),
     EpsonSensorDescription(
         key=KEY_SERIAL,
-        name="Serial number",
+        translation_key="serial",
         icon="mdi:barcode",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _product(d, KEY_SERIAL),
     ),
     EpsonSensorDescription(
         key=KEY_MAC_ADDRESS,
-        name="MAC address",
+        translation_key="mac_address",
         icon="mdi:network",
         entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda d: _product(d, KEY_MAC_ADDRESS),
@@ -411,14 +411,14 @@ async def async_setup_entry(
     if paper_source.get("size") or paper_source.get("type"):
         descriptions.append(EpsonSensorDescription(
             key="paper_source_size",
-            name="Paper source size",
+            translation_key="paper_source_size",
             icon="mdi:file-document",
             entity_category=EntityCategory.DIAGNOSTIC,
             value_fn=lambda d: (d.get(DATA_PRODUCT, {}).get(KEY_PAPER_SOURCE) or {}).get("size"),
         ))
         descriptions.append(EpsonSensorDescription(
             key="paper_source_type",
-            name="Paper source type",
+            translation_key="paper_source_type",
             icon="mdi:file-document",
             entity_category=EntityCategory.DIAGNOSTIC,
             value_fn=lambda d: (d.get(DATA_PRODUCT, {}).get(KEY_PAPER_SOURCE) or {}).get("type"),

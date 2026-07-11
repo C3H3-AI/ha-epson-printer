@@ -105,11 +105,6 @@ print:
     (text/raw or PDF/image over IPP). Office documents (Word/Excel/PowerPoint/...)
     are converted to PDF first when the 'Convert Office documents' option is
     enabled for this integration; otherwise they are rejected with a clear error.
-  target:
-    device:
-      integration: epson_printer
-    entity:
-      integration: epson_printer
   fields:
     content:
       name: Content

@@ -1,0 +1,120 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "host": "主机地址",
+          "name": "名称",
+          "scheme": "协议",
+          "port": "端口"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接到打印机",
+      "unknown": "发生未知错误"
+    },
+    "abort": {
+      "already_configured": "该打印机已配置"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "轮询间隔（秒）",
+          "convert_office": "转换 Office 文档（需安装 LibreOffice）",
+          "soffice_path": "LibreOffice 可执行文件路径"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "pages_total": { "name": "已打印页数" },
+      "pages_bw": { "name": "黑白页数" },
+      "pages_color": { "name": "彩色页数" },
+      "pages_simplex": { "name": "单面页数" },
+      "pages_duplex": { "name": "双面页数" },
+      "ink_k": { "name": "黑色墨量" },
+      "ink_c": { "name": "青色墨量" },
+      "ink_m": { "name": "品红墨量" },
+      "ink_y": { "name": "黄色墨量" },
+      "printer_status": { "name": "打印机状态" },
+      "scanner_status": { "name": "扫描仪状态" },
+      "maintenance_box": { "name": "维护箱寿命" },
+      "epson_connect_status": { "name": "Epson Connect 状态" },
+      "first_print_date": { "name": "首次打印日期" },
+      "firmware": { "name": "固件版本" },
+      "serial": { "name": "序列号" },
+      "mac_address": { "name": "MAC 地址" },
+      "function_bw_copy": { "name": "黑白复印数" },
+      "function_color_copy": { "name": "彩色复印数" },
+      "function_bw_fax": { "name": "黑白传真数" },
+      "function_color_fax": { "name": "彩色传真数" },
+      "function_bw_scan": { "name": "黑白扫描数" },
+      "function_color_scan": { "name": "彩色扫描数" },
+      "function_bw_print": { "name": "黑白打印数" },
+      "function_color_print": { "name": "彩色打印数" },
+      "function_bw_other": { "name": "黑白其他" },
+      "function_color_other": { "name": "彩色其他" },
+      "ipp_state": { "name": "IPP 状态" },
+      "ipp_state_reason": { "name": "IPP 状态原因" },
+      "ipp_uptime": { "name": "IPP 运行时间" },
+      "ipp_model": { "name": "IPP 型号" },
+      "ipp_queued_jobs": { "name": "IPP 队列任务数" },
+      "ipp_accepting_jobs": { "name": "IPP 是否接受任务" },
+      "ipp_pages_per_minute": { "name": "IPP 每分钟页数" },
+      "paper_source_size": { "name": "纸张来源尺寸" },
+      "paper_source_type": { "name": "纸张来源类型" }
+    }
+  },
+  "services": {
+    "print_text": {
+      "name": "打印文本",
+      "description": "通过 RAW 端口 9100 发送文本进行打印。",
+      "fields": {
+        "text": { "name": "文本内容", "description": "要打印的文本内容。" }
+      }
+    },
+    "print_file": {
+      "name": "打印文件",
+      "description": "通过 RAW 端口 9100 打印文件（PDF、图片等）。",
+      "fields": {
+        "filepath": { "name": "文件路径", "description": "HA 服务器上的绝对文件路径。" }
+      }
+    },
+    "clean_printhead": {
+      "name": "清洗打印头",
+      "description": "运行打印头清洗程序。",
+      "fields": {
+        "deep": { "name": "深度清洗", "description": "是否运行深度清洗。" }
+      }
+    },
+    "nozzle_check": {
+      "name": "喷嘴检查",
+      "description": "打印喷嘴检查图案。"
+    },
+    "ipp_print_file": {
+      "name": "通过 IPP 打印文件",
+      "description": "通过 IPP（支持 JPEG、PNG、PDF）提交打印任务。",
+      "fields": {
+        "file_path": { "name": "文件路径", "description": "HA 服务器上的绝对文件路径，支持 JPEG、PNG、PDF（取决于打印机）。" },
+        "job_name": { "name": "任务名称", "description": "打印机队列中显示的可选任务名。" }
+      }
+    },
+    "initialize": {
+      "name": "初始化 / 重置打印机",
+      "description": "发送 ESC @ 将打印机重置为初始状态，可用于从卡纸或卡在“打印中”状态恢复。"
+    },
+    "print": {
+      "name": "打印",
+      "description": "统一打印入口。提供纯文本或 HA 服务器上的绝对文件路径。文本、图片和 PDF 会自动路由（文本走 RAW，PDF/图片走 IPP）。在集成选项中开启“转换 Office 文档”后，Office 文档（Word/Excel/PowerPoint 等）会先转为 PDF 再打印。",
+      "fields": {
+        "content": { "name": "内容", "description": "要打印的文本，或 HA 服务器上的绝对文件路径。" },
+        "content_type": { "name": "内容类型", "description": "auto：自动判别；text：强制文本；file：强制按文件路径处理。" },
+        "job_name": { "name": "任务名称", "description": "打印机队列中显示的可选任务名（仅 IPP）。" }
+      }
+    }
+  }
+}

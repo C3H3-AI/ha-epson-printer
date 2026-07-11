@@ -58,7 +58,13 @@
       "ipp_model": { "name": "IPP model" },
       "ipp_queued_jobs": { "name": "IPP queued jobs" },
       "ipp_accepting_jobs": { "name": "IPP accepting jobs" },
-      "ipp_pages_per_minute": { "name": "IPP pages per minute" }
+      "ipp_pages_per_minute": { "name": "IPP pages per minute" },
+      "serial": { "name": "Serial number" },
+      "mac_address": { "name": "MAC address" },
+      "maintenance_box": { "name": "Maintenance box" },
+      "scanner_status": { "name": "Scanner status" },
+      "paper_source_size": { "name": "Paper source size" },
+      "paper_source_type": { "name": "Paper source type" }
     }
   }
 }
