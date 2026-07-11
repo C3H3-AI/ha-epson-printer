@@ -24,6 +24,9 @@ CONF_SCAN_INTERVAL: Final = "scan_interval"
 CONF_IPP_PORT: Final = "ipp_port"
 CONF_RAW_PORT: Final = "raw_port"
 CONF_IPP_UUID: Final = "ipp_uuid"
+CONF_CONVERT_OFFICE: Final = "convert_office"
+CONF_SOFFICE_PATH: Final = "soffice_path"
+DEFAULT_SOFFICE_PATH: Final = "soffice"
 
 DEFAULT_SCHEME: Final = "http"
 DEFAULT_PORT: Final = 80
@@ -122,6 +125,7 @@ SERVICE_CLEAN_PRINTHEAD: Final = "clean_printhead"
 SERVICE_NOZZLE_CHECK: Final = "nozzle_check"
 SERVICE_IPP_PRINT_FILE: Final = "ipp_print_file"
 SERVICE_INITIALIZE: Final = "initialize"
+SERVICE_PRINT: Final = "print"
 
 # ---------------------------------------------------------------------------
 # Shared SSL context (lazy singleton, reused across modules)

@@ -20,11 +20,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from zeroconf import ServiceBrowser, ServiceStateChange
 
 from .const import (
+    CONF_CONVERT_OFFICE,
     CONF_IPP_UUID,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
     CONF_SCHEME,
+    CONF_SOFFICE_PATH,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SOFFICE_PATH,
     DOMAIN,
     HTTP_TIMEOUT_SECONDS,
     IPP_DOMAIN,
@@ -379,11 +382,15 @@ class EpsonPrinterOptionsFlow(config_entries.OptionsFlow):
         current = self.config_entry.options.get(
             CONF_SCAN_INTERVAL, int(DEFAULT_SCAN_INTERVAL.total_seconds())
         )
+        convert = self.config_entry.options.get(CONF_CONVERT_OFFICE, False)
+        soffice = self.config_entry.options.get(CONF_SOFFICE_PATH, DEFAULT_SOFFICE_PATH)
         schema = vol.Schema(
             {
                 vol.Optional(CONF_SCAN_INTERVAL, default=current): vol.All(
                     vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL_SECONDS)
-                )
+                ),
+                vol.Optional(CONF_CONVERT_OFFICE, default=convert): bool,
+                vol.Optional(CONF_SOFFICE_PATH, default=soffice): str,
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)

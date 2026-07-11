@@ -11,19 +11,25 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr
 
 from .const import (
+    CONF_CONVERT_OFFICE,
+    CONF_HOST,
     CONF_IPP_UUID,
+    CONF_SOFFICE_PATH,
+    DEFAULT_SOFFICE_PATH,
     DOMAIN,
     IPP_DOMAIN,
     SERVICE_CLEAN_PRINTHEAD,
+    SERVICE_INITIALIZE,
     SERVICE_IPP_PRINT_FILE,
     SERVICE_NOZZLE_CHECK,
+    SERVICE_PRINT,
     SERVICE_PRINT_FILE,
     SERVICE_PRINT_TEXT,
-    SERVICE_INITIALIZE,
 )
 from .control import EpsonPrinterControl
 from .coordinator import EpsonPrinterCoordinator
 from .ipp_client import EpsonIppClient
+from .print_router import route_print
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -129,61 +135,40 @@ def _resolve_printer_entry_id(
 
 
 def _register_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Register RAW 9100 print control services (register once)."""
+    """Register all print/control services (register once)."""
 
     if hass.services.has_service(DOMAIN, SERVICE_PRINT_TEXT):
         return
 
-    async def _handle_print_text(call: ServiceCall):
+    def _entry_host(call: ServiceCall) -> str | None:
         entry_id = _resolve_printer_entry_id(hass, call)
         if entry_id is None:
+            return None
+        return hass.config_entries.async_get_entry(entry_id).data[CONF_HOST]
+
+    async def _handle_print_text(call: ServiceCall):
+        host = _entry_host(call)
+        if host is None:
             return
-        host = hass.config_entries.async_get_entry(entry_id).data[CONF_HOST]
         control = EpsonPrinterControl(host, 9100)
         text = call.data.get("text", "")
-        result = await hass.async_add_executor_job(control.print_text, text)
-        if not result:
+        if not await hass.async_add_executor_job(control.print_text, text):
             _LOGGER.error("Failed to print text")
 
     async def _handle_print_file(call: ServiceCall):
-        entry_id = _resolve_printer_entry_id(hass, call)
-        if entry_id is None:
+        host = _entry_host(call)
+        if host is None:
             return
-        host = hass.config_entries.async_get_entry(entry_id).data[CONF_HOST]
         control = EpsonPrinterControl(host, 9100)
         filepath = call.data.get("filepath", "")
-        result = await hass.async_add_executor_job(control.print_file, filepath)
-        if not result:
+        if not await hass.async_add_executor_job(control.print_file, filepath):
             _LOGGER.error("Failed to print file: %s", filepath)
-
-    async def _handle_clean_printhead(call: ServiceCall):
-        entry_id = _resolve_printer_entry_id(hass, call)
-        if entry_id is None:
-            return
-        host = hass.config_entries.async_get_entry(entry_id).data[CONF_HOST]
-        control = EpsonPrinterControl(host, 9100)
-        deep = call.data.get("deep", False)
-        result = await hass.async_add_executor_job(control.clean_printhead, deep)
-        if not result:
-            _LOGGER.error("Failed to clean printhead")
-
-    async def _handle_nozzle_check(call: ServiceCall):
-        entry_id = _resolve_printer_entry_id(hass, call)
-        if entry_id is None:
-            return
-        host = hass.config_entries.async_get_entry(entry_id).data[CONF_HOST]
-        control = EpsonPrinterControl(host, 9100)
-        result = await hass.async_add_executor_job(control.nozzle_check)
-        if not result:
-            _LOGGER.error("Failed to run nozzle check")
 
     async def _handle_ipp_print_file(call: ServiceCall):
         """Print a file via IPP (supports JPEG, PNG, PDF)."""
-        entry_id = _resolve_printer_entry_id(hass, call)
-        if entry_id is None:
+        host = _entry_host(call)
+        if host is None:
             return
-        entry = hass.config_entries.async_get_entry(entry_id)
-        host = entry.data[CONF_HOST]
         file_path = call.data.get("file_path", "")
         job_name = call.data.get("job_name")
 
@@ -218,24 +203,67 @@ def _register_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
         if not result or result.get("job_id") is None:
             _LOGGER.error("IPP print failed for %s", file_path)
 
-    hass.services.async_register(DOMAIN, SERVICE_PRINT_TEXT, _handle_print_text)
-    hass.services.async_register(DOMAIN, SERVICE_PRINT_FILE, _handle_print_file)
-    hass.services.async_register(DOMAIN, SERVICE_CLEAN_PRINTHEAD, _handle_clean_printhead)
-    hass.services.async_register(DOMAIN, SERVICE_NOZZLE_CHECK, _handle_nozzle_check)
+    async def _handle_clean_printhead(call: ServiceCall):
+        host = _entry_host(call)
+        if host is None:
+            return
+        if not await hass.async_add_executor_job(
+            EpsonPrinterControl(host, 9100).clean_printhead,
+            call.data.get("deep", False),
+        ):
+            _LOGGER.error("Failed to clean printhead")
+
+    async def _handle_nozzle_check(call: ServiceCall):
+        host = _entry_host(call)
+        if host is None:
+            return
+        if not await hass.async_add_executor_job(
+            EpsonPrinterControl(host, 9100).nozzle_check
+        ):
+            _LOGGER.error("Failed to run nozzle check")
+
     async def _handle_initialize(call: ServiceCall):
         """Send ESC @ to reset the printer to its initial state."""
+        host = _entry_host(call)
+        if host is None:
+            return
+        if not await hass.async_add_executor_job(
+            EpsonPrinterControl(host, 9100).initialize
+        ):
+            _LOGGER.error("Failed to initialize printer")
+
+    async def _handle_print(call: ServiceCall):
+        """Unified print entry point (smart routing via print_router)."""
         entry_id = _resolve_printer_entry_id(hass, call)
         if entry_id is None:
             return
-        host = hass.config_entries.async_get_entry(entry_id).data[CONF_HOST]
-        control = EpsonPrinterControl(host, 9100)
-        result = await hass.async_add_executor_job(control.initialize)
-        if not result:
-            _LOGGER.error("Failed to initialize printer")
+        entry = hass.config_entries.async_get_entry(entry_id)
+        host = entry.data[CONF_HOST]
+        content = call.data.get("content", "")
+        content_type = call.data.get("content_type", "auto")
+        job_name = call.data.get("job_name")
+        convert_office = entry.options.get(CONF_CONVERT_OFFICE, False)
+        soffice = entry.options.get(CONF_SOFFICE_PATH, DEFAULT_SOFFICE_PATH)
+        result = await hass.async_add_executor_job(
+            route_print,
+            host,
+            content,
+            content_type,
+            job_name,
+            convert_office,
+            soffice,
+        )
+        if not result.get("ok"):
+            _LOGGER.error(
+                "Print failed: %s (channel=%s)",
+                result.get("note"),
+                result.get("channel"),
+            )
 
     hass.services.async_register(DOMAIN, SERVICE_PRINT_TEXT, _handle_print_text)
     hass.services.async_register(DOMAIN, SERVICE_PRINT_FILE, _handle_print_file)
+    hass.services.async_register(DOMAIN, SERVICE_IPP_PRINT_FILE, _handle_ipp_print_file)
     hass.services.async_register(DOMAIN, SERVICE_CLEAN_PRINTHEAD, _handle_clean_printhead)
     hass.services.async_register(DOMAIN, SERVICE_NOZZLE_CHECK, _handle_nozzle_check)
-    hass.services.async_register(DOMAIN, SERVICE_IPP_PRINT_FILE, _handle_ipp_print_file)
     hass.services.async_register(DOMAIN, SERVICE_INITIALIZE, _handle_initialize)
+    hass.services.async_register(DOMAIN, SERVICE_PRINT, _handle_print)

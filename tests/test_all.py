@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 import os
+import tempfile
 import importlib.util
 
 _test_dir = os.path.dirname(os.path.abspath(__file__))
@@ -27,6 +28,7 @@ _const = _preload("const", os.path.join(_pkg_path, "const.py"))
 _parser = _preload("parser", os.path.join(_pkg_path, "parser.py"))
 _ipl = _preload("ipp_client", os.path.join(_pkg_path, "ipp_client.py"))
 _ctrl = _preload("control", os.path.join(_pkg_path, "control.py"))
+_print_router = _preload("print_router", os.path.join(_pkg_path, "print_router.py"))
 
 from epson_printer.const import (
     KEY_PAGES_TOTAL, KEY_PAGES_BW, KEY_PAGES_COLOR,
@@ -39,6 +41,12 @@ from epson_printer.const import (
     KEY_MODEL, ESC_COMMANDS,
 )
 from epson_printer.control import EpsonPrinterControl
+from epson_printer.print_router import (
+    route_print,
+    looks_like_path,
+    convert_office_to_pdf,
+)
+from unittest.mock import patch
 import pytest
 from bs4 import BeautifulSoup, Tag
 
@@ -551,6 +559,89 @@ class TestEscCommands:
     def test_init(self):  assert ESC_COMMANDS["initialize"] == b"\x1b\x40"
     def test_clean(self): assert ESC_COMMANDS["printhead_clean"] == b"\x1b(C\x02\x00\x00\x01"
     def test_deep(self):  assert ESC_COMMANDS["printhead_clean_deep"] == b"\x1b(C\x02\x00\x00\x02"
+
+
+# ── Unified print router (no network / no HA) ──────────────────────────────
+
+class TestPrintRouter:
+    """Smart routing in print_router.route_print.
+
+    Uses ``patch.object`` on the already-loaded ``epson_printer.print_router``
+    module so we never trigger a real import of the (HA-dependent) package.
+    """
+
+    def test_looks_like_path(self):
+        assert looks_like_path("Hello World") is False
+        assert looks_like_path("") is False
+        assert looks_like_path("/config/www/report.pdf") is True
+        assert looks_like_path("report.docx") is True
+        assert looks_like_path("C:\\temp\\a.png") is True
+
+    def test_route_text_auto(self):
+        with patch.object(_print_router, "EpsonPrinterControl") as ctrl_cls:
+            inst = ctrl_cls.return_value
+            inst.print_text.return_value = True
+            r = route_print("1.2.3.4", "hi there", content_type="auto")
+            assert r["ok"] is True
+            assert r["channel"] == "raw_text"
+            inst.print_text.assert_called_once_with("hi there")
+
+    def test_route_text_forced(self):
+        # Even a path-like string is printed as text when forced.
+        with patch.object(_print_router, "EpsonPrinterControl") as ctrl_cls:
+            inst = ctrl_cls.return_value
+            inst.print_text.return_value = True
+            r = route_print("h", "/looks/like/a/path", content_type="text")
+            assert r["channel"] == "raw_text"
+            inst.print_text.assert_called_once_with("/looks/like/a/path")
+
+    def test_route_pdf_over_ipp(self, tmp_path):
+        f = tmp_path / "r.pdf"
+        f.write_bytes(b"%PDF-1.4")
+        with patch.object(_print_router, "EpsonIppClient") as ipp_cls:
+            inst = ipp_cls.return_value
+            inst.print_job.return_value = {"job_id": 7, "job_state": "completed"}
+            r = route_print("h", str(f), content_type="file")
+            assert r["ok"] is True
+            assert r["channel"] == "ipp"
+            assert r["job_id"] == 7
+
+    def test_route_office_without_convert_rejected(self, tmp_path):
+        f = tmp_path / "doc.docx"
+        f.write_bytes(b"PK\x03\x04")
+        r = route_print("h", str(f), content_type="file", convert_office=False)
+        assert r["ok"] is False
+        assert "Convert Office" in r["note"]
+
+    def test_route_office_with_convert(self, tmp_path):
+        src = tmp_path / "doc.docx"
+        src.write_bytes(b"PK\x03\x04")
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF-1.4")
+        with patch.object(
+            _print_router, "convert_office_to_pdf", return_value=str(pdf)
+        ), patch.object(_print_router, "EpsonIppClient") as ipp_cls:
+            inst = ipp_cls.return_value
+            inst.print_job.return_value = {"job_id": 9, "job_state": "completed"}
+            r = route_print(
+                "h", str(src), content_type="file",
+                convert_office=True, soffice="soffice",
+            )
+            assert r["ok"] is True
+            assert r["channel"] == "ipp"
+            assert r["job_id"] == 9
+
+    def test_route_missing_file(self):
+        r = route_print("h", "/no/such/file.pdf", content_type="file")
+        assert r["ok"] is False
+        assert "not found" in r["note"]
+
+    def test_convert_office_missing_soffice(self, tmp_path):
+        src = tmp_path / "doc.docx"
+        src.write_bytes(b"PK")
+        with patch.object(_print_router.shutil, "which", return_value=None), \
+             patch.object(_print_router.os.path, "exists", return_value=False):
+            assert convert_office_to_pdf(str(src), "soffice") is None
 
 
 

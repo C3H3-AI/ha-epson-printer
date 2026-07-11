@@ -96,3 +96,42 @@ initialize:
     entity:
       integration: epson_printer
   fields: {}
+
+print:
+  name: Print
+  description: >
+    Unified print entry point. Provide plain text or an absolute file path
+    on the HA server. Text, images and PDFs are routed automatically
+    (text/raw or PDF/image over IPP). Office documents (Word/Excel/PowerPoint/...)
+    are converted to PDF first when the 'Convert Office documents' option is
+    enabled for this integration; otherwise they are rejected with a clear error.
+  target:
+    device:
+      integration: epson_printer
+    entity:
+      integration: epson_printer
+  fields:
+    content:
+      name: Content
+      description: Text to print, or an absolute file path on the HA server.
+      required: true
+      example: "Hello World"
+      selector:
+        text:
+    content_type:
+      name: Content type
+      description: "auto: decide by content; text: force text; file: force file path."
+      required: false
+      default: auto
+      selector:
+        select:
+          options:
+            - auto
+            - text
+            - file
+    job_name:
+      name: Job name
+      description: Optional job name shown in the printer queue (IPP only).
+      required: false
+      selector:
+        text:
