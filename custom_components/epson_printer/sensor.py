@@ -238,6 +238,20 @@ DIAGNOSTIC_DESCRIPTIONS: tuple[EpsonSensorDescription, ...] = (
         entity_registry_enabled_default=False,
         value_fn=lambda d: _product(d, KEY_FIRMWARE),
     ),
+    EpsonSensorDescription(
+        key=KEY_SERIAL,
+        name="Serial number",
+        icon="mdi:barcode",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _product(d, KEY_SERIAL),
+    ),
+    EpsonSensorDescription(
+        key=KEY_MAC_ADDRESS,
+        name="MAC address",
+        icon="mdi:network",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda d: _product(d, KEY_MAC_ADDRESS),
+    ),
 )
 
 # IPP-based sensors (real-time printer state)
@@ -388,6 +402,26 @@ async def async_setup_entry(
     for desc in DIAGNOSTIC_DESCRIPTIONS:
         if desc.value_fn(data) is not None:
             descriptions.append(desc)
+
+    # Paper source (current tray size + media type). Only when the printer
+    # actually reports it — many models expose no paper-source page, so
+    # building the sensors unconditionally would yield dead entities.
+    paper_source = data.get(DATA_PRODUCT, {}).get(KEY_PAPER_SOURCE) or {}
+    if paper_source.get("size") or paper_source.get("type"):
+        descriptions.append(EpsonSensorDescription(
+            key="paper_source_size",
+            name="Paper source size",
+            icon="mdi:file-document",
+            entity_category=EntityCategory.DIAGNOSTIC,
+            value_fn=lambda d: (d.get(DATA_PRODUCT, {}).get(KEY_PAPER_SOURCE) or {}).get("size"),
+        ))
+        descriptions.append(EpsonSensorDescription(
+            key="paper_source_type",
+            name="Paper source type",
+            icon="mdi:file-document",
+            entity_category=EntityCategory.DIAGNOSTIC,
+            value_fn=lambda d: (d.get(DATA_PRODUCT, {}).get(KEY_PAPER_SOURCE) or {}).get("type"),
+        ))
 
     descriptions += list(IPP_DESCRIPTIONS)
     descriptions += list(size_descriptions)

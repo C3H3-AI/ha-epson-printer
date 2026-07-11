@@ -35,7 +35,7 @@ from epson_printer.const import (
     KEY_PAGES_BY_LANGUAGE,
     KEY_INK_LEVELS, KEY_MAINTENANCE_BOX,
     KEY_PRINTER_STATUS, KEY_SCANNER_STATUS,
-    KEY_FIRMWARE, KEY_SERIAL, KEY_MAC_ADDRESS,
+    KEY_FIRMWARE, KEY_SERIAL, KEY_MAC_ADDRESS, KEY_PAPER_SOURCE,
     KEY_MODEL, ESC_COMMANDS,
 )
 from epson_printer.control import EpsonPrinterControl
@@ -417,6 +417,13 @@ CSS_HTML = """<html><head><title>L3250</title></head><body>
 
 MIN_HTML = "<html><body></body></html>"
 
+PAPER_HTML = """<html><head><title>L3250</title></head><body>
+<fieldset class="group"><legend>Paper Source</legend><dl class="values">
+  <dd class="value"><div class="preserve-white-space">A4</div></dd>
+  <dd class="value"><div class="preserve-white-space">Plain Paper</div></dd>
+</dl></fieldset>
+</body></html>"""
+
 
 class TestParseProductStatus:
     def test_img_inks(self):
@@ -448,6 +455,15 @@ class TestParseProductStatus:
         r = parse_product_status(MIN_HTML)
         assert r[KEY_INK_LEVELS] == {}
         assert r[KEY_PRINTER_STATUS] is None
+
+    def test_paper_source(self):
+        r = parse_product_status(PAPER_HTML)
+        ps = r[KEY_PAPER_SOURCE]
+        assert ps == {"size": "A4", "type": "Plain Paper"}
+
+    def test_paper_source_absent(self):
+        r = parse_product_status(MIN_HTML)
+        assert r[KEY_PAPER_SOURCE] == {}
 
 
 # ── IPP binary protocol (no network) ──────────────────────────────────────

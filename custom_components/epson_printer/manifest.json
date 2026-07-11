@@ -1,7 +1,7 @@
 {
     "domain":  "epson_printer",
     "name":  "Epson Printer",
-    "version":  "0.2.2",
+    "version":  "0.2.3",
     "documentation":  "https://github.com/C3H3-AI/ha-epson-printer",
     "issue_tracker":  "https://github.com/C3H3-AI/ha-epson-printer/issues",
     "authors":  [

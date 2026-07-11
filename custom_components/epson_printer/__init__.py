@@ -19,6 +19,7 @@ from .const import (
     SERVICE_NOZZLE_CHECK,
     SERVICE_PRINT_FILE,
     SERVICE_PRINT_TEXT,
+    SERVICE_INITIALIZE,
 )
 from .control import EpsonPrinterControl
 from .coordinator import EpsonPrinterCoordinator
@@ -221,4 +222,20 @@ def _register_services(hass: HomeAssistant, entry: ConfigEntry) -> None:
     hass.services.async_register(DOMAIN, SERVICE_PRINT_FILE, _handle_print_file)
     hass.services.async_register(DOMAIN, SERVICE_CLEAN_PRINTHEAD, _handle_clean_printhead)
     hass.services.async_register(DOMAIN, SERVICE_NOZZLE_CHECK, _handle_nozzle_check)
+    async def _handle_initialize(call: ServiceCall):
+        """Send ESC @ to reset the printer to its initial state."""
+        entry_id = _resolve_printer_entry_id(hass, call)
+        if entry_id is None:
+            return
+        host = hass.config_entries.async_get_entry(entry_id).data[CONF_HOST]
+        control = EpsonPrinterControl(host, 9100)
+        result = await hass.async_add_executor_job(control.initialize)
+        if not result:
+            _LOGGER.error("Failed to initialize printer")
+
+    hass.services.async_register(DOMAIN, SERVICE_PRINT_TEXT, _handle_print_text)
+    hass.services.async_register(DOMAIN, SERVICE_PRINT_FILE, _handle_print_file)
+    hass.services.async_register(DOMAIN, SERVICE_CLEAN_PRINTHEAD, _handle_clean_printhead)
+    hass.services.async_register(DOMAIN, SERVICE_NOZZLE_CHECK, _handle_nozzle_check)
     hass.services.async_register(DOMAIN, SERVICE_IPP_PRINT_FILE, _handle_ipp_print_file)
+    hass.services.async_register(DOMAIN, SERVICE_INITIALIZE, _handle_initialize)

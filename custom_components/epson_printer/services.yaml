@@ -84,3 +84,15 @@ ipp_print_file:
       example: "Sunset Photo"
       selector:
         text:
+
+initialize:
+  name: Initialize / reset printer
+  description: >
+    Send ESC @ to reset the printer to its initial state.
+    Useful to recover from a paper jam or a stuck "printing" status.
+  target:
+    device:
+      integration: epson_printer
+    entity:
+      integration: epson_printer
+  fields: {}

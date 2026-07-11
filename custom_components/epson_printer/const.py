@@ -121,6 +121,7 @@ SERVICE_PRINT_FILE: Final = "print_file"
 SERVICE_CLEAN_PRINTHEAD: Final = "clean_printhead"
 SERVICE_NOZZLE_CHECK: Final = "nozzle_check"
 SERVICE_IPP_PRINT_FILE: Final = "ipp_print_file"
+SERVICE_INITIALIZE: Final = "initialize"
 
 # ---------------------------------------------------------------------------
 # Shared SSL context (lazy singleton, reused across modules)
