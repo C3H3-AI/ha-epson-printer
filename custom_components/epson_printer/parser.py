@@ -376,6 +376,39 @@ def _parse_advanced_maintenance(html: str) -> dict[str, Any]:
     if language_fs is not None:
         result[KEY_PAGES_BY_LANGUAGE] = _parse_keyed_dl(language_fs, LANGUAGE_KEYS)
 
+    # Fallback: derive aggregate page totals when the printer exposes no
+    # dedicated "totals" fieldset. Common on EcoTank / L-series maintenance
+    # pages, which only publish a per-size (simplex/duplex × bw/color) table.
+    # MUST run AFTER by_size / by_function are populated above, otherwise the
+    # source dicts are still empty and the derivation silently no-ops.
+    if result[KEY_PAGES_TOTAL] is None:
+        by_size = result[KEY_PAGES_BY_SIZE]
+        if by_size:
+            simplex = duplex = bw = color = 0
+            for size_vals in by_size.values():
+                sb = size_vals.get("simplex_bw") or 0
+                sc = size_vals.get("simplex_color") or 0
+                db = size_vals.get("duplex_bw") or 0
+                dc = size_vals.get("duplex_color") or 0
+                simplex += sb + sc
+                duplex += db + dc
+                bw += sb + db
+                color += sc + dc
+            if simplex or duplex or bw or color:
+                result[KEY_PAGES_SIMPLEX] = simplex
+                result[KEY_PAGES_DUPLEX] = duplex
+                result[KEY_PAGES_BW] = bw
+                result[KEY_PAGES_COLOR] = color
+                result[KEY_PAGES_TOTAL] = simplex + duplex
+        elif result[KEY_PAGES_BY_FUNCTION]:
+            by_func = result[KEY_PAGES_BY_FUNCTION]
+            bw = sum(v for k, v in by_func.items() if k.startswith("bw_") and v)
+            color = sum(v for k, v in by_func.items() if k.startswith("color_") and v)
+            if bw or color:
+                result[KEY_PAGES_BW] = bw
+                result[KEY_PAGES_COLOR] = color
+                result[KEY_PAGES_TOTAL] = bw + color
+
     return result
 
 

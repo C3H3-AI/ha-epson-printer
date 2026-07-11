@@ -32,6 +32,7 @@ from epson_printer.const import (
     KEY_PAGES_TOTAL, KEY_PAGES_BW, KEY_PAGES_COLOR,
     KEY_PAGES_DUPLEX, KEY_PAGES_SIMPLEX,
     KEY_FIRST_PRINT_DATE, KEY_PAGES_BY_FUNCTION, KEY_PAGES_BY_SIZE,
+    KEY_PAGES_BY_LANGUAGE,
     KEY_INK_LEVELS, KEY_MAINTENANCE_BOX,
     KEY_PRINTER_STATUS, KEY_SCANNER_STATUS,
     KEY_FIRMWARE, KEY_SERIAL, KEY_MAC_ADDRESS,
@@ -182,6 +183,58 @@ PARTIAL_HTML = """<html><body><div class="section">
 
 EMPTY_HTML = "<html><body></body></html>"
 
+# Real-world EcoTank / L-series layout: per-size (simplex/duplex × bw/color)
+# table, a function dl, and a language dl — but NO dedicated "totals" fieldset.
+# Totals must be derived from pages_by_size.
+L3250_HTML = """<html><body><div class="section">
+  <dl class="values"><dd class="value"><div class="preserve-white-space">2025-3-1</div></dd></dl>
+  <fieldset class="group"><legend>Size</legend><table class="values"><tbody>
+    <tr><td class="value number">0</td><td class="value number">0</td><td class="value number">0</td><td class="value number">0</td></tr>
+    <tr><td class="value number">229</td><td class="value number">2180</td><td class="value number">0</td><td class="value number">0</td></tr>
+    <tr><td class="value number">0</td><td class="value number">26</td><td class="value number">0</td><td class="value number">0</td></tr>
+    <tr><td class="value number">0</td><td class="value number">3</td><td class="value number">0</td><td class="value number">0</td></tr>
+    <tr><td class="value number">0</td><td class="value number">0</td><td class="value number">0</td><td class="value number">0</td></tr>
+    <tr><td class="value number">0</td><td class="value number">0</td><td class="value number">0</td><td class="value number">0</td></tr>
+    <tr><td class="value number">0</td><td class="value number">0</td><td class="value number">0</td><td class="value number">0</td></tr>
+    <tr><td class="value number">0</td><td class="value number">68</td><td class="value number">0</td><td class="value number">0</td></tr>
+  </tbody></table></fieldset>
+  <fieldset class="group"><legend>Function</legend><dl class="values">
+    <dd class="value"><div class="preserve-white-space">2506</div></dd>
+    <dd class="value"><div class="preserve-white-space">229</div></dd>
+    <dd class="value"><div class="preserve-white-space">2277</div></dd>
+    <dd class="value"><div class="preserve-white-space">0</div></dd>
+    <dd class="value"><div class="preserve-white-space">2506</div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+  </dl></fieldset>
+  <fieldset class="group"><legend>Language</legend><dl class="values">
+    <dd class="value"><div class="preserve-white-space">124</div></dd>
+    <dd class="value"><div class="preserve-white-space">52</div></dd>
+    <dd class="value"><div class="preserve-white-space">0</div></dd>
+    <dd class="value"><div class="preserve-white-space">0</div></dd>
+    <dd class="value"><div class="preserve-white-space">123</div></dd>
+  </dl></fieldset>
+</div></body></html>"""
+
+# Printer that exposes ONLY a function breakdown (no size table, no totals).
+FUNC_ONLY_HTML = """<html><body><div class="section">
+  <fieldset class="group"><legend>Function</legend><dl class="values">
+    <dd class="value"><div class="preserve-white-space">100</div></dd>
+    <dd class="value"><div class="preserve-white-space">50</div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+    <dd class="value"><div class="preserve-white-space"></div></dd>
+  </dl></fieldset>
+</div></body></html>"""
+
 
 class TestParseMaintenance:
     def test_full(self):
@@ -218,6 +271,60 @@ class TestParseMaintenance:
 
     def test_empty(self):
         assert parse_maintenance(EMPTY_HTML)[KEY_PAGES_TOTAL] is None
+
+
+class TestParseMaintenanceL3250:
+    """EcoTank / L-series: no totals fieldset, totals derived from by_size."""
+
+    def test_derived_totals(self):
+        r = parse_maintenance(L3250_HTML)
+        # Aggregated from the per-size table (simplex_bw/color, duplex_bw/color).
+        assert r[KEY_PAGES_TOTAL] == 2506
+        assert r[KEY_PAGES_SIMPLEX] == 2506
+        assert r[KEY_PAGES_DUPLEX] == 0
+        assert r[KEY_PAGES_BW] == 229
+        assert r[KEY_PAGES_COLOR] == 2277
+
+    def test_first_print_date(self):
+        r = parse_maintenance(L3250_HTML)
+        assert r[KEY_FIRST_PRINT_DATE] == "2025-03-01"
+
+    def test_functions_present_absent(self):
+        r = parse_maintenance(L3250_HTML)
+        f = r[KEY_PAGES_BY_FUNCTION]
+        # Reported functions keep their values.
+        assert f["bw_copy"] == 2506
+        assert f["color_copy"] == 229
+        assert f["bw_fax"] == 2277
+        assert f["bw_scan"] == 2506
+        assert f["color_fax"] == 0
+        # Not exposed by this model → None (sensor should be filtered out).
+        assert f["bw_print"] is None
+        assert f["color_print"] is None
+        assert f["color_scan"] is None
+        assert f["bw_other"] is None
+        assert f["color_other"] is None
+
+    def test_language_parsed(self):
+        r = parse_maintenance(L3250_HTML)
+        lang = r[KEY_PAGES_BY_LANGUAGE]
+        assert lang["escpr"] == 124
+        assert lang["pcl"] == 52
+        assert lang["other"] == 123
+
+
+class TestParseMaintenanceFuncOnly:
+    """Printer with only a function breakdown (no size table, no totals)."""
+
+    def test_totals_from_function(self):
+        r = parse_maintenance(FUNC_ONLY_HTML)
+        assert r[KEY_PAGES_BY_SIZE] == {}
+        assert r[KEY_PAGES_TOTAL] == 150
+        assert r[KEY_PAGES_BW] == 100
+        assert r[KEY_PAGES_COLOR] == 50
+        # No simplex/duplex breakdown available → stay None.
+        assert r[KEY_PAGES_SIMPLEX] is None
+        assert r[KEY_PAGES_DUPLEX] is None
 
 
 # ── parse_product_status ───────────────────────────────────────────────────

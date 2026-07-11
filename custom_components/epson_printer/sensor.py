@@ -319,13 +319,28 @@ async def async_setup_entry(
         if colour in available_inks
     )
 
-    descriptions = (
-        PAGE_DESCRIPTIONS
-        + FUNCTION_DESCRIPTIONS
-        + ink_descriptions
-        + DIAGNOSTIC_DESCRIPTIONS
-        + IPP_DESCRIPTIONS
-    )
+    data = coordinator.data or {}
+
+    descriptions: list[EpsonSensorDescription] = list(PAGE_DESCRIPTIONS)
+
+    # Only expose function counters the printer actually reports. Many
+    # models publish only a subset (e.g. copy/scan/fax but no print counts),
+    # so creating the rest just yields permanently-unavailable dead entities.
+    for desc in FUNCTION_DESCRIPTIONS:
+        fname = desc.key.split("_", 1)[1]
+        if _function_count(data, fname) is not None:
+            descriptions.append(desc)
+
+    descriptions += list(ink_descriptions)
+
+    # Only expose diagnostic sensors that have a value on this printer
+    # (e.g. scanner_status / maintenance_box are absent on many models).
+    for desc in DIAGNOSTIC_DESCRIPTIONS:
+        if desc.value_fn(data) is not None:
+            descriptions.append(desc)
+
+    descriptions += list(IPP_DESCRIPTIONS)
+
     async_add_entities(
         EpsonPrinterSensor(coordinator, description) for description in descriptions
     )
