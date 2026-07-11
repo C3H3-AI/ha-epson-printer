@@ -247,3 +247,12 @@ MIT
 [hacs]: https://hacs.xyz/
 [ha-badge]: https://img.shields.io/badge/Home%20Assistant-2024.1+-blue.svg?style=flat-square
 [ha]: https://www.home-assistant.io/
+
+## 💝 赞助
+
+如果这个集成帮到了你，欢迎请我喝杯咖啡 ☕
+
+| 微信支付 | 支付宝 |
+|:--------:|:------:|
+| ![微信](sponsor/wechat.jpg) | ![支付宝](sponsor/alipay.jpg) |
+
