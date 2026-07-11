@@ -45,6 +45,8 @@ from .const import (
     KEY_MODEL,
     KEY_PAGES_BW,
     KEY_PAGES_BY_FUNCTION,
+    KEY_PAGES_BY_LANGUAGE,
+    KEY_PAGES_BY_SIZE,
     KEY_PAGES_COLOR,
     KEY_PAGES_DUPLEX,
     KEY_PAGES_SIMPLEX,
@@ -80,6 +82,21 @@ def _product(data: Mapping[str, Any], key: str) -> Any:
 
 def _function_count(data: Mapping[str, Any], key: str) -> Any:
     return data.get(DATA_MAINTENANCE, {}).get(KEY_PAGES_BY_FUNCTION, {}).get(key)
+
+
+def _size_total(size_vals: Mapping[str, Any]) -> int:
+    """Sum all simplex/duplex × bw/color sub-counts for one paper size."""
+    return sum(v for v in size_vals.values() if v)
+
+
+def _size_count(data: Mapping[str, Any], size_key: str) -> int:
+    return _size_total(
+        data.get(DATA_MAINTENANCE, {}).get(KEY_PAGES_BY_SIZE, {}).get(size_key, {})
+    )
+
+
+def _language_count(data: Mapping[str, Any], lang_key: str) -> Any:
+    return data.get(DATA_MAINTENANCE, {}).get(KEY_PAGES_BY_LANGUAGE, {}).get(lang_key)
 
 
 def _ink_level(data: Mapping[str, Any], colour: str) -> Any:
@@ -321,6 +338,39 @@ async def async_setup_entry(
 
     data = coordinator.data or {}
 
+    # Data-driven counters: one sensor per paper size / print language the
+    # printer actually reports. The parser already extracts these dimensions
+    # (pages_by_size / pages_by_language) but they were previously discarded.
+    # Building them dynamically means no permanently-unavailable dead entities.
+    maint = data.get(DATA_MAINTENANCE, {}) or {}
+    by_size = maint.get(KEY_PAGES_BY_SIZE, {}) or {}
+    by_language = maint.get(KEY_PAGES_BY_LANGUAGE, {}) or {}
+
+    size_descriptions = tuple(
+        EpsonSensorDescription(
+            key=f"pages_size_{size_key}",
+            name=f"Pages {size_key.replace('_', '/').upper()}",
+            icon="mdi:file-document-outline",
+            native_unit_of_measurement=UNIT_PAGES,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            entity_registry_enabled_default=False,
+            value_fn=lambda d, sk=size_key: _size_count(d, sk),
+        )
+        for size_key in by_size
+    )
+    language_descriptions = tuple(
+        EpsonSensorDescription(
+            key=f"pages_language_{lang_key}",
+            name=f"Pages {lang_key.replace('_', '/').upper()}",
+            icon="mdi:translate",
+            native_unit_of_measurement=UNIT_PAGES,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            entity_registry_enabled_default=False,
+            value_fn=lambda d, lk=lang_key: _language_count(d, lk),
+        )
+        for lang_key in by_language
+    )
+
     descriptions: list[EpsonSensorDescription] = list(PAGE_DESCRIPTIONS)
 
     # Only expose function counters the printer actually reports. Many
@@ -340,6 +390,8 @@ async def async_setup_entry(
             descriptions.append(desc)
 
     descriptions += list(IPP_DESCRIPTIONS)
+    descriptions += list(size_descriptions)
+    descriptions += list(language_descriptions)
 
     async_add_entities(
         EpsonPrinterSensor(coordinator, description) for description in descriptions

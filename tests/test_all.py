@@ -326,6 +326,64 @@ class TestParseMaintenanceFuncOnly:
         assert r[KEY_PAGES_SIMPLEX] is None
         assert r[KEY_PAGES_DUPLEX] is None
 
+    def test_no_size_language_dimensions(self):
+        # A function-only printer must not expose size/language counters,
+        # so no dead entities should ever be created for them.
+        r = parse_maintenance(FUNC_ONLY_HTML)
+        assert r[KEY_PAGES_BY_SIZE] == {}
+        assert r[KEY_PAGES_BY_LANGUAGE] == {}
+
+
+class TestSizeLanguageDimensions:
+    """The previously-discarded pages_by_size / pages_by_language dimensions.
+
+    These back the data-driven ``pages_size_*`` / ``pages_language_*`` sensors.
+    Lock the parsed structure so the new entities always have real data.
+    """
+
+    def test_l3250_size_keys(self):
+        r = parse_maintenance(L3250_HTML)
+        s = r[KEY_PAGES_BY_SIZE]
+        # SIZE_KEYS order: row0=a3_ledger, then a4_letter, a5, a6, ...
+        # L3250's 8 rows map to the known SIZE_KEYS list.
+        assert "a4_letter" in s
+        assert "a5" in s
+        assert "a6" in s
+        assert "other" in s
+
+    def test_l3250_size_subvalues(self):
+        r = parse_maintenance(L3250_HTML)
+        s = r[KEY_PAGES_BY_SIZE]
+        # Representative row values from the real L3250 maintenance page.
+        assert s["a4_letter"]["simplex_bw"] == 229
+        assert s["a4_letter"]["simplex_color"] == 2180
+        assert s["a4_letter"]["duplex_bw"] == 0
+        assert s["a4_letter"]["duplex_color"] == 0
+        assert s["a5"]["simplex_color"] == 26
+        assert s["a6"]["simplex_color"] == 3
+        assert s["other"]["simplex_color"] == 68
+
+    def test_size_total_aggregation(self):
+        # Mirror the lambda used by the pages_size_* sensor value_fn.
+        r = parse_maintenance(L3250_HTML)
+        s = r[KEY_PAGES_BY_SIZE]
+        total_a4 = sum(v for v in s["a4_letter"].values() if v)
+        assert total_a4 == 229 + 2180  # 2409
+        total_all = sum(
+            sum(v for v in vals.values() if v) for vals in s.values()
+        )
+        # matches the derived pages_total (2506) from the per-size table
+        assert total_all == 2506
+
+    def test_language_values(self):
+        r = parse_maintenance(L3250_HTML)
+        lang = r[KEY_PAGES_BY_LANGUAGE]
+        assert lang["escpr"] == 124
+        assert lang["pcl"] == 52
+        assert lang["postscript_pdf"] == 0
+        assert lang["escpage"] == 0
+        assert lang["other"] == 123
+
 
 # ── parse_product_status ───────────────────────────────────────────────────
 
