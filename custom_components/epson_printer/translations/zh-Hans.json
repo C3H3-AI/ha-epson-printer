@@ -40,6 +40,8 @@
       "ink_c": { "name": "青色墨量" },
       "ink_m": { "name": "品红墨量" },
       "ink_y": { "name": "黄色墨量" },
+      "ink_lc": { "name": "淡青色墨量" },
+      "ink_lm": { "name": "淡品红墨量" },
       "printer_status": { "name": "打印机状态" },
       "scanner_status": { "name": "扫描仪状态" },
       "maintenance_box": { "name": "维护箱寿命" },

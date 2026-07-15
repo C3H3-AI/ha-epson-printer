@@ -38,6 +38,8 @@
       "ink_c": { "name": "Cyan ink" },
       "ink_m": { "name": "Magenta ink" },
       "ink_y": { "name": "Yellow ink" },
+      "ink_lc": { "name": "Light cyan ink" },
+      "ink_lm": { "name": "Light magenta ink" },
       "printer_status": { "name": "Printer status" },
       "epson_connect_status": { "name": "Epson Connect" },
       "first_print_date": { "name": "First print date" },
