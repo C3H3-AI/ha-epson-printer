@@ -1,4 +1,4 @@
-﻿*.pyc
+*.pyc
 __pycache__/
 .DS_Store
 
@@ -8,6 +8,8 @@ _*.sh
 _*.py
 # 调试笔记 / 产物 markdown（README.md 已跟踪不受影响）
 *.md
+!CHANGELOG.md
+!.github/PULL_REQUEST_TEMPLATE.md
 # 临时 lovelace 卡片设计稿
 printer_card.yaml
 # 测试缓存
