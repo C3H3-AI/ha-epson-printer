@@ -1,7 +1,4 @@
 {
-  "epson_printer": {
-    "default": "mdi:printer"
-  },
   "entity": {
     "sensor": {
       "pages_total": {

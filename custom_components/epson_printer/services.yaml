@@ -1,11 +1,6 @@
 print_text:
   name: Print text
   description: Send text to print via RAW port 9100.
-  target:
-    device:
-      integration: epson_printer
-    entity:
-      integration: epson_printer
   fields:
     text:
       name: Text
@@ -18,11 +13,6 @@ print_text:
 print_file:
   name: Print file
   description: Print a file (PDF, image, etc.) via RAW port 9100.
-  target:
-    device:
-      integration: epson_printer
-    entity:
-      integration: epson_printer
   fields:
     filepath:
       name: File path
@@ -35,11 +25,6 @@ print_file:
 clean_printhead:
   name: Clean printhead
   description: Run printhead cleaning cycle.
-  target:
-    device:
-      integration: epson_printer
-    entity:
-      integration: epson_printer
   fields:
     deep:
       name: Deep clean
@@ -52,21 +37,11 @@ clean_printhead:
 nozzle_check:
   name: Nozzle check
   description: Print a nozzle check pattern.
-  target:
-    device:
-      integration: epson_printer
-    entity:
-      integration: epson_printer
   fields: {}
 
 ipp_print_file:
   name: Print file via IPP
   description: Submit a print job via IPP (supports JPEG, PNG, PDF).
-  target:
-    device:
-      integration: epson_printer
-    entity:
-      integration: epson_printer
   fields:
     file_path:
       name: File path
@@ -90,11 +65,6 @@ initialize:
   description: >
     Send ESC @ to reset the printer to its initial state.
     Useful to recover from a paper jam or a stuck "printing" status.
-  target:
-    device:
-      integration: epson_printer
-    entity:
-      integration: epson_printer
   fields: {}
 
 print:
