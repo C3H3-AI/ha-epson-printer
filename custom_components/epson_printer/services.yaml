@@ -4,8 +4,6 @@ print_text:
   target:
     device:
       integration: epson_printer
-    entity:
-      integration: epson_printer
   fields:
     text:
       name: Text
@@ -20,8 +18,6 @@ print_file:
   description: Print a file (PDF, image, etc.) via RAW port 9100.
   target:
     device:
-      integration: epson_printer
-    entity:
       integration: epson_printer
   fields:
     filepath:
@@ -38,8 +34,6 @@ clean_printhead:
   target:
     device:
       integration: epson_printer
-    entity:
-      integration: epson_printer
   fields:
     deep:
       name: Deep clean
@@ -55,8 +49,6 @@ nozzle_check:
   target:
     device:
       integration: epson_printer
-    entity:
-      integration: epson_printer
   fields: {}
 
 ipp_print_file:
@@ -64,8 +56,6 @@ ipp_print_file:
   description: Submit a print job via IPP (supports JPEG, PNG, PDF).
   target:
     device:
-      integration: epson_printer
-    entity:
       integration: epson_printer
   fields:
     file_path:
@@ -92,8 +82,6 @@ initialize:
     Useful to recover from a paper jam or a stuck "printing" status.
   target:
     device:
-      integration: epson_printer
-    entity:
       integration: epson_printer
   fields: {}
 
